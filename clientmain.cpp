@@ -35,7 +35,7 @@ int main(int argc, char *argv[]){
 	thistype.minor_version = 0;
 	calcMessage recvMessage;
 	
-
+	fd_set master;
     int sockfd;
 	struct sockaddr_in servaddr;
 	if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -57,10 +57,12 @@ int main(int argc, char *argv[]){
 	}
 	servaddr.sin_family = AF_INET;
 	
-
+	FD_ZERO(&master);
 	//"connect"
-	
-	//if (select(sockfd + 1, sockfd, sockfd, NULL, ));
+	FD_SET(sockfd, &master);
+	if (select(sockfd + 1, sockfd, NULL, NULL, NULL)) {
+
+	}
 	int sendOk = sendto(sockfd, &thistype, sizeof(struct calcMessage), 0, (sockaddr*)&servaddr, sizeof(servaddr));
 	if (sendOk < 1) 
 	{
@@ -116,7 +118,7 @@ int main(int argc, char *argv[]){
 	}
 	
   /* Do magic */
-	sockfd.close();
+	close(sockfd);
 	return 0;
 
 }

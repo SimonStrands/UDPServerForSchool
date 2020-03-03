@@ -41,9 +41,9 @@ void checkJobbList(int signum){
   
   return;
 }
-void makeACalculation(calcProtocol& TheProtocol);
-bool calcmessageTheSame(calcMessage a, calcMessage b);
-void calcTheMessage(calcProtocol& Thecalculations);
+void makeACalculation(calcProtocol *TheProtocol);
+bool calcmessageTheSame(calcMessage *a, calcMessage *b);
+void calcTheMessage(calcProtocol *Thecalculations);
 
 
 int main(int argc, char *argv[]){
@@ -165,16 +165,23 @@ int main(int argc, char *argv[]){
   signal(SIGALRM, checkJobbList);
   setitimer(ITIMER_REAL,&alarmTime,NULL); // Start/register the alarm. 
 
-  calcMessage thistype;
-  thistype.type = 22;
-  thistype.message = 0;
-  thistype.protocol = 17;
-  thistype.major_version = 1;
-  thistype.minor_version = 0;
-  calcMessage recvMessage;
-  calcMessage sendMessage;
-  calcProtocol sendProtocol;
-  calcProtocol recvProtocol;
+  calcMessage* thistype = new calcMessage;
+  thistype->type = 22;
+  thistype->message = 0;
+  thistype->protocol = 17;
+  thistype->major_version = 1;
+  thistype->minor_version = 0;
+
+  int maxClients = 10;
+  float* fResults = new float[maxClients];
+  int* iResults = new int[maxClients];
+  int ID = 0;
+
+  void* voidRecv = malloc(sizeof(calcProtocol));;
+  calcProtocol* recvProtocol = new calcProtocol;
+  calcProtocol* sendProtocol = new calcProtocol;
+  calcMessage* sendMessage = new calcMessage;
+  calcMessage* recvMessage = new calcMessage;
 
   int sockfd;
   fd_set rset;
@@ -197,19 +204,52 @@ int main(int argc, char *argv[]){
 
 while(terminate==0){
     printf("This is the main loop, %d time.\n",loopCount);
-    
-
-    
-    int n = recvfrom(sockfd, &recvMessage, sizeof(calcMessage), 0,
+   
+    int sendOk = 0;
+    int n = recvfrom(sockfd, voidRecv, sizeof(calcProtocol), 0,
         (struct sockaddr*) & clientaddr, &len);
-    if (n < 0) {
+    if (n < 0)
+    {
         std::cout << "error" << std::endl;
+        return -1;
     }
-    else {
-        std::cout << "client connected" << std::endl;
-        if (calcmessageTheSame(recvMessage, thistype)) {
+    if (n == sizeof(calcProtocol)) {
+        //check results
+        recvProtocol = (calcProtocol*)voidRecv;
+        if (iResults[recvProctocol->id] != nullptr || fResults[recvProctocol->id] != nullptr) {
+            if (iResults[recvProtocol->id] == recvProtocol->inResult && fResults[recvProtocol->id] == recvProtocol->flResult) {
+                sendMessage->message = 1;
+            }
+            else {
+                sendMessage->message = 2;
+            }
+            //send results
+            sendOk = sendto(sockfd, sendMessage, sizeof(struct calcMessage), 0, (sockaddr*)&clientaddr, sizeof(clientaddr));
+            if (sendOk < 1) {
+                std::cout << "error" << std::endl;
+            }
+            else {
+                std::cout << "send result from protocol" << std::endl;
+            }
+        }
+        else {
+            std::cout << "error got weird message from a client" << std::endl;
+        }
+    }
+    else if (n == sizeof(calcMessage)) {
+        recvMessage = (calcMessage*)voidRecv;
+        if (calcmessageTheSame(recvMessage, thistype))
+        {
+            //send protocol
             makeACalculation(sendProtocol);
-            int sendOk = sendto(sockfd, &sendProtocol, sizeof(struct calcProtocol), 0, (sockaddr*)&clientaddr, sizeof(clientaddr));
+            sendProtocol->id = ID++;
+            calcTheMessage(sendProtocol);
+
+            fResults[sendProtocol->id] = sendProtocol->flResult;
+            iResults[sendProtocol->id] = sendProtocol->inResult;
+
+            std::cout << "Sending to ID: " << ID << std::endl;
+            sendOk = sendto(sockfd, sendProtocol, sizeof(struct calcProtocol), 0, (sockaddr*)&clientaddr, sizeof(clientaddr));
             if (sendOk < 1) {
                 std::cout << "cant send" << std::endl;
                 return -1;
@@ -218,135 +258,95 @@ while(terminate==0){
                 std::cout << "sent protocol with calc" << std::endl;
             }
         }
-        else {
-            sendto(sockfd, &sendMessage, sizeof(struct calcMessage), 0, (sockaddr*)&clientaddr, sizeof(clientaddr));
+        else
+        {
+            sendMessage->type = 2;
+            sendMessage->message = 2;
+            sendMessage->major_version = 1;
+            sendMessage->minor_version = 0;
+            sendto(sockfd, sendMessage, sizeof(struct calcMessage), 0, (sockaddr*)&clientaddr, sizeof(clientaddr));
             std::cout << "sent error" << std::endl;
             return -1;
         }
-        calcTheMessage(sendProtocol);
-        n = recvfrom(sockfd, &recvProtocol, sizeof(calcProtocol), 0,
-            (struct sockaddr*) & clientaddr, &len);
-        if (n < 1) {
-            std::cout << "error" << std::endl;
-            return 0;
-        }
-        bool ok = false;
-        if (recvProtocol.arith == sendProtocol.arith) {
-            if (recvProtocol.arith <= 4 && sendProtocol.arith <= 4) {
-                //int
-                std::cout << "got result" << sendProtocol.inResult << std::endl;
-                if (recvProtocol.inResult == sendProtocol.inResult) {
-                    //sendok
-                    sendMessage.message = 1;
-                    sendto(sockfd, &sendMessage, sizeof(struct calcMessage), 0, (sockaddr*)&clientaddr, sizeof(clientaddr));
-                    std::cout << "sent ok" << std::endl;
-                    ok = true;
-                }
-            }
-            else if (recvProtocol.arith >= 5 && sendProtocol.arith >= 5) {
-                //float
-                std::cout << "got result" << sendProtocol.flResult << std::endl;
-                if (recvProtocol.flResult == sendProtocol.flResult) {
-                    //sendok
-                    sendMessage.message = 1;
-                    sendto(sockfd, &sendMessage, sizeof(struct calcMessage), 0, (sockaddr*)&clientaddr, sizeof(clientaddr));
-                    std::cout << "sent ok" << std::endl;
-                    ok = true;
-                }
-            }
-            else {
-                std::cout << "error" << std::endl;
-            }
-        }
-        else {
-            std::cout << "error" << std::endl;
-        }
-        if (!ok) {
-            sendMessage.message = 2;
-            std::cout << "sending error" << std::endl;
-            sendto(sockfd, &sendMessage, sizeof(struct calcMessage), 0, (sockaddr*)&clientaddr, sizeof(clientaddr));
-        }
-
-
     }
     sleep(1);
     loopCount++;
 }
 
   printf("done.\n");
-  sockfd.close();
+  close(sockfd);
   return(0);
 
 
   
 }
 
-bool calcmessageTheSame(calcMessage a, calcMessage b)
+bool calcmessageTheSame(calcMessage* a, calcMessage* b)
 {
     std::cout << "see if calcmessage is the same" << std::endl;
     bool theReturn = false;
-    if (a.major_version == b.major_version &&
-        a.message == b.message &&
-        a.minor_version == b.minor_version &&
-        a.protocol == b.protocol &&
-        a.type == b.type) 
+    if (a->major_version    == b->major_version &&
+        a->message          == b->message &&
+        a->minor_version    == b->minor_version &&
+        a->protocol         == b->protocol &&
+        a->type             == b->type) 
     {
         theReturn = true;
     }
     return theReturn;
 }
 
-void calcTheMessage(calcProtocol& Thecalculations)
+void calcTheMessage(calcProtocol* Thecalculations)
 {
-    switch (Thecalculations.arith)
+    switch (Thecalculations->arith)
     {
     case 1:
         std::cout << "add" << std::endl;
-        Thecalculations.inResult = Thecalculations.inValue1 + Thecalculations.inValue2;
+        Thecalculations->inResult = Thecalculations->inValue1 + Thecalculations->inValue2;
         break;
     case 2:
         std::cout << "sub" << std::endl;
-        Thecalculations.inResult = Thecalculations.inValue1 - Thecalculations.inValue2;
+        Thecalculations->inResult = Thecalculations->inValue1 - Thecalculations->inValue2;
         break;
     case 3:
         std::cout << "mul" << std::endl;
-        Thecalculations.inResult = Thecalculations.inValue1 * Thecalculations.inValue2;
+        Thecalculations->inResult = Thecalculations->inValue1 * Thecalculations->inValue2;
         break;
     case 4:
         std::cout << "div" << std::endl;
-        Thecalculations.inResult = Thecalculations.inValue1 / Thecalculations.inValue2;
+        Thecalculations->inResult = Thecalculations->inValue1 / Thecalculations->inValue2;
         break;
     case 5:
         std::cout << "fadd" << std::endl;
-        Thecalculations.flResult = Thecalculations.flValue1 + Thecalculations.flValue2;
+        Thecalculations->flResult = Thecalculations->flValue1 + Thecalculations->flValue2;
         break;
     case 6:
         std::cout << "fsub" << std::endl;
-        Thecalculations.flResult = Thecalculations.flValue1 - Thecalculations.flValue2;
+        Thecalculations->flResult = Thecalculations->flValue1 - Thecalculations->flValue2;
         break;
     case 7:
         std::cout << "fmul" << std::endl;
-        Thecalculations.flResult = Thecalculations.flValue1 * Thecalculations.flValue2;
+        Thecalculations->flResult = Thecalculations->flValue1 * Thecalculations->flValue2;
         break;
     case 8:
         std::cout << "fdiv" << std::endl;
-        Thecalculations.flResult = Thecalculations.flValue1 / Thecalculations.flValue2;
+        Thecalculations->flResult = Thecalculations->flValue1 / Thecalculations->flValue2;
         break;
     default:
         break;
     }
-    std::cout << Thecalculations.inValue1 << " " << Thecalculations.inValue2 << std::endl;
+    std::cout << Thecalculations->inValue1 << " " << Thecalculations->inValue2 << std::endl;
 }
 
-void makeACalculation(calcProtocol& TheProtocol) {
+void makeACalculation(calcProtocol* TheProtocol) {
     srand(time(NULL));
     int a = rand() % 8 + 1;
-    TheProtocol.arith = a;
+    TheProtocol->arith = a;
     float x = (float)(rand() % 1000 + 1) / 10.0f;
     float y = (float)(rand() % 1000 + 1) / 10.0f;
-    TheProtocol.flValue1 = x;
-    TheProtocol.flValue2 = y;
-    TheProtocol.inValue1 = (int)x;
-    TheProtocol.inValue2 = (int)y;
+    TheProtocol->flValue1 = x;
+    TheProtocol->flValue2 = y;
+    TheProtocol->inValue1 = (int)x;
+    TheProtocol->inValue2 = (int)y;
    
 }

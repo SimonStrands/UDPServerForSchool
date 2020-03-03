@@ -113,7 +113,7 @@ int main(){
             }
         }
     }
-    sockfd.close();
+    close(sockfd);
     return 0;
 }
 bool calcmessageTheSame(calcMessage *a, calcMessage *b)
